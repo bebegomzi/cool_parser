@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date, datetime, timedelta
 import html
 import json
 import re
@@ -76,9 +77,17 @@ INDEX_HTML = """<!doctype html>
     }
     .toolbar {
       display: grid;
-      grid-template-columns: 1fr 104px 104px 92px 84px;
+      grid-template-columns: 1fr 104px 104px 92px 92px 84px;
       gap: 8px;
       padding: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .datebar {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 0 12px 12px;
       border-bottom: 1px solid var(--line);
     }
     .check {
@@ -150,9 +159,9 @@ INDEX_HTML = """<!doctype html>
       width: 100%;
       display: block;
       min-height: 74px;
-      padding: 10px 12px;
-      border: 0;
-      border-bottom: 1px solid var(--line);
+      padding: 11px 12px;
+      border: 1px solid transparent;
+      border-bottom-color: var(--line);
       background: #fff;
       color: var(--text);
       text-align: left;
@@ -165,15 +174,15 @@ INDEX_HTML = """<!doctype html>
     .item.send {
       background: #fff4c2;
     }
-    .item.unread {
-      background: #eaf4ff;
-      border-left: 5px solid #1f6fbf;
-      padding-left: 7px;
+    .item:hover {
+      border-color: #aac9e8;
     }
-    .item.unread:hover, .item.unread.active {
-      background: #d9ecff;
+    .item.active {
+      border-color: #1f6fbf;
+      border-left-width: 5px;
+      padding-left: 8px;
+      box-shadow: inset 0 0 0 1px #1f6fbf;
     }
-    .item:hover, .item.active { background: var(--accent-soft); }
     .meta {
       display: flex;
       gap: 6px;
@@ -208,10 +217,11 @@ INDEX_HTML = """<!doctype html>
     }
     .snippet {
       color: #3f4652;
-      line-height: 1.35;
+      line-height: 1.45;
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       font-weight: 400;
     }
     .item.unread .snippet {
@@ -336,6 +346,65 @@ INDEX_HTML = """<!doctype html>
       border-color: #f0a3a3;
       color: #a11d1d;
     }
+    mark {
+      background: #b9f6ca;
+      color: inherit;
+      padding: 0 2px;
+      border-radius: 3px;
+    }
+    .attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .attachment-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .attachment-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .attachment {
+      min-height: 26px;
+      padding: 3px 8px;
+      border: 1px solid #8fc5a6;
+      border-radius: 999px;
+      background: #eefaf2;
+      color: #145c32;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+    }
+    .attachment:hover {
+      background: #dff4e8;
+    }
+    .toast {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 10;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #1f6f3d;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.18);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .attach-badge {
+      background: #eefaf2;
+      border-color: #8fc5a6;
+      color: #145c32;
+    }
     .empty {
       padding: 24px;
       color: var(--muted);
@@ -352,6 +421,7 @@ INDEX_HTML = """<!doctype html>
       main { grid-template-columns: 1fr; grid-template-rows: 48% 52%; }
       .left { border-right: 0; border-bottom: 1px solid var(--line); }
       .toolbar { grid-template-columns: 1fr 1fr; }
+      .datebar { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -375,7 +445,36 @@ INDEX_HTML = """<!doctype html>
           <option value="send">보낸 메시지</option>
         </select>
         <label class="check"><input type="checkbox" name="grouped" value="1" checked>대화 묶기</label>
+        <label class="check"><input type="checkbox" name="has_attachment" value="1">첨부 있음</label>
         <button type="submit">검색</button>
+        <div class="datebar">
+          <select id="yearFilter" name="year" aria-label="연도">
+            <option value="">전체 연도</option>
+          </select>
+          <select name="month" aria-label="월">
+            <option value="">전체 월</option>
+            <option value="01">1월</option>
+            <option value="02">2월</option>
+            <option value="03">3월</option>
+            <option value="04">4월</option>
+            <option value="05">5월</option>
+            <option value="06">6월</option>
+            <option value="07">7월</option>
+            <option value="08">8월</option>
+            <option value="09">9월</option>
+            <option value="10">10월</option>
+            <option value="11">11월</option>
+            <option value="12">12월</option>
+          </select>
+          <select name="period" aria-label="기간">
+            <option value="">전체 기간</option>
+            <option value="today">오늘</option>
+            <option value="last7">최근 7일</option>
+            <option value="this_month">이번 달</option>
+            <option value="last_month">지난 달</option>
+            <option value="this_year">올해</option>
+          </select>
+        </div>
       </form>
       <div class="pager">
         <button type="button" id="prevPage">이전</button>
@@ -388,6 +487,7 @@ INDEX_HTML = """<!doctype html>
       <div class="empty">왼쪽에서 메시지를 선택하면 본문이 표시됩니다.</div>
     </section>
   </main>
+  <div class="toast" id="toast"></div>
   <script>
     const form = document.querySelector("#searchForm");
     const results = document.querySelector("#results");
@@ -396,13 +496,30 @@ INDEX_HTML = """<!doctype html>
     const prevPage = document.querySelector("#prevPage");
     const nextPage = document.querySelector("#nextPage");
     const pageInfo = document.querySelector("#pageInfo");
+    const yearFilter = document.querySelector("#yearFilter");
+    const toast = document.querySelector("#toast");
     const pageSize = 100;
     let currentPage = 1;
+    let currentKeywords = [];
 
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, ch => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       }[ch]));
+    }
+
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&");
+    }
+
+    function highlight(value) {
+      let text = escapeHtml(value);
+      const keywords = [...new Set(currentKeywords.filter(Boolean))].sort((a, b) => b.length - a.length);
+      for (const keyword of keywords) {
+        const pattern = new RegExp(escapeRegExp(escapeHtml(keyword)), "gi");
+        text = text.replace(pattern, match => `<mark>${match}</mark>`);
+      }
+      return text;
     }
 
     function labelBox(value) {
@@ -417,6 +534,62 @@ INDEX_HTML = """<!doctype html>
       const match = String(header ?? "").match(/^(.+?)님이 보낸글\\s*>>\\s*(.+)$/);
       if (!match) return { sender: "", date: header };
       return { sender: match[1], date: match[2] };
+    }
+
+    function timeFromDate(value) {
+      const match = String(value ?? "").match(/\\b(\\d{1,2}:\\d{2})(?::\\d{2})?/);
+      return match ? match[1] : "";
+    }
+
+    function cleanDisplayName(value) {
+      let text = String(value ?? "").trim().replace(/;+$/, "");
+      const match = text.match(/^(.+?)\\(/);
+      if (match) text = match[1];
+      return text.trim();
+    }
+
+    function currentHeader(item) {
+      const who = item.box === "send" ? "나" : cleanDisplayName(item.sender || item.person);
+      const time = timeFromDate(item.date || item.parsed_date);
+      return `현재 메시지(${who || "알 수 없음"})${time ? " " + time : ""}`;
+    }
+
+    let toastTimer = null;
+    function showToast(message, anchor) {
+      const rect = anchor?.getBoundingClientRect?.();
+      toast.textContent = message;
+      if (rect) {
+        toast.style.left = `${Math.min(rect.left, window.innerWidth - 210)}px`;
+        toast.style.top = `${Math.max(8, rect.top - 44)}px`;
+      }
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 1600);
+    }
+
+    async function copyText(value, anchor) {
+      try {
+        await navigator.clipboard.writeText(value);
+        showToast("파일명을 복사했습니다.", anchor);
+      } catch {
+        showToast("복사에 실패했습니다.", anchor);
+      }
+    }
+
+    function renderAttachments(value) {
+      const names = String(value ?? "").split(";").map(name => name.trim()).filter(Boolean);
+      if (names.length === 0) return "";
+      return `
+        <strong>첨부파일</strong>
+        <span class="attachment-wrap">
+          <span class="attachments">
+            ${names.map(name => `
+              <button type="button" class="attachment" data-copy="${escapeHtml(name)}">${highlight(name)}</button>
+            `).join("")}
+          </span>
+          <span class="attachment-note">다운로드는 불가하며 클릭 시 파일명을 복사합니다.</span>
+        </span>
+      `;
     }
 
     function isMine(sender, item) {
@@ -435,8 +608,8 @@ INDEX_HTML = """<!doctype html>
         return `
           <div class="thread">
             <section class="message-part ${side}">
-              <div class="part-head">현재 메시지</div>
-              <div class="part-text">${escapeHtml(source)}</div>
+              <div class="part-head">${escapeHtml(currentHeader(item))}</div>
+              <div class="part-text">${highlight(source)}</div>
             </section>
           </div>
         `;
@@ -445,7 +618,7 @@ INDEX_HTML = """<!doctype html>
       const parts = [];
       const firstText = source.slice(0, matches[0].index).trim();
       parts.push({
-        header: "현재 메시지",
+        header: currentHeader(item),
         text: firstText,
         side: item.box === "send" ? "sent" : "received"
       });
@@ -466,8 +639,8 @@ INDEX_HTML = """<!doctype html>
       return `<div class="thread">${chronologicalParts.map((part) => {
         return `
           <section class="message-part ${part.side}">
-            <div class="part-head">${escapeHtml(part.header)}</div>
-            <div class="part-text">${escapeHtml(part.text || "(내용 없음)")}</div>
+            <div class="part-head">${highlight(part.header)}</div>
+            <div class="part-text">${highlight(part.text || "(내용 없음)")}</div>
           </section>
         `;
       }).join("")}</div>`;
@@ -476,12 +649,12 @@ INDEX_HTML = """<!doctype html>
     function renderDetailPeople(item) {
       if (item.box === "send") {
         return `
-          <strong>받는 사람</strong><span>${escapeHtml(item.receiver || item.person)}</span>
+          <strong>받는 사람</strong><span>${highlight(item.receiver || item.person)}</span>
         `;
       }
       return `
-        <strong>보낸 사람</strong><span>${escapeHtml(item.sender || item.person)}</span>
-        <strong>받은 사람</strong><span>${escapeHtml(item.receiver)}</span>
+        <strong>보낸 사람</strong><span>${highlight(item.sender || item.person)}</span>
+        <strong>받은 사람</strong><span>${highlight(item.receiver)}</span>
       `;
     }
 
@@ -489,6 +662,7 @@ INDEX_HTML = """<!doctype html>
       event?.preventDefault();
       currentPage = page;
       const params = new URLSearchParams(new FormData(form));
+      currentKeywords = String(params.get("q") ?? "").trim().split(/\\s+/).filter(Boolean);
       params.set("limit", String(pageSize));
       params.set("offset", String((currentPage - 1) * pageSize));
       const response = await fetch(`/api/search?${params.toString()}`);
@@ -510,10 +684,10 @@ INDEX_HTML = """<!doctype html>
             ${item.is_unread ? `<span class="badge unread-badge">안 읽음</span>` : ""}
             ${item.has_quote ? `<span class="badge reply-badge">인용</span>` : ""}
             ${item.conversation_count > 1 ? `<span class="badge reply-badge">대화 ${item.conversation_count}</span>` : ""}
-            <span>${escapeHtml(item.person)}</span>
+            ${item.has_attachment ? `<span class="badge attach-badge">첨부</span>` : ""}
+            <span>${highlight(item.person)}</span>
           </div>
-          <div class="title">${escapeHtml(item.title || "(제목 없음)")}</div>
-          <div class="snippet">${escapeHtml(item.snippet)}</div>
+          <div class="snippet">${highlight(item.snippet || item.title || "(내용 없음)")}</div>
         </button>
       `).join("") || `<div class="empty">검색 결과가 없습니다.</div>`;
     }
@@ -528,13 +702,14 @@ INDEX_HTML = """<!doctype html>
       }
       detail.innerHTML = `
         <div class="detail-head">
-          <h2 class="detail-title">${escapeHtml(item.title || "(제목 없음)")}</h2>
+          <h2 class="detail-title">${highlight(item.title || "(제목 없음)")}</h2>
           <div class="kv">
             <strong>날짜</strong><span>${escapeHtml(item.date)}</span>
             <strong>원본</strong><span>${escapeHtml(labelSource(item.source_db))} DB / ${escapeHtml(item.source_file)}</span>
             <strong>보관함</strong><span>${escapeHtml(labelBox(item.box))}</span>
             <strong>읽음 상태</strong><span>${item.is_unread ? "안 읽음" : "읽음"}</span>
             ${renderDetailPeople(item)}
+            ${renderAttachments(item.attachment_names)}
             <strong>원래 키</strong><span>${escapeHtml(item.original_key)}</span>
           </div>
         </div>
@@ -544,9 +719,22 @@ INDEX_HTML = """<!doctype html>
       if (body) body.scrollTop = body.scrollHeight;
     }
 
+    async function loadYears() {
+      const response = await fetch("/api/years");
+      const data = await response.json();
+      if (!response.ok) return;
+      yearFilter.innerHTML = `<option value="">전체 연도</option>` + data.years.map(year => (
+        `<option value="${escapeHtml(year)}">${escapeHtml(year)}년</option>`
+      )).join("");
+    }
+
     results.addEventListener("click", event => {
       const item = event.target.closest(".item");
       if (item) loadDetail(item.dataset.id);
+    });
+    detail.addEventListener("click", event => {
+      const attachment = event.target.closest(".attachment");
+      if (attachment) copyText(attachment.dataset.copy, attachment);
     });
     form.addEventListener("submit", event => searchMessages(event, 1));
     prevPage.addEventListener("click", () => {
@@ -554,6 +742,7 @@ INDEX_HTML = """<!doctype html>
     });
     nextPage.addEventListener("click", () => searchMessages(undefined, currentPage + 1));
     document.querySelector("#query").focus();
+    loadYears();
     searchMessages(undefined, 1);
   </script>
 </body>
@@ -646,33 +835,111 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 self.send_html(INDEX_HTML)
             elif parsed.path == "/api/search":
                 self.handle_search(parse_qs(parsed.query))
+            elif parsed.path == "/api/years":
+                self.handle_years()
             elif parsed.path == "/api/message":
                 self.handle_message(parse_qs(parsed.query))
             else:
                 self.send_json({"error": "찾을 수 없는 주소입니다."}, 404)
 
+        def handle_years(self) -> None:
+            with self.get_con() as con:
+                rows = con.execute(
+                    """
+                    select distinct substr(parsed_date, 1, 4) as year
+                    from messages
+                    where parsed_date is not null and length(parsed_date) >= 4
+                    order by year desc
+                    """
+                ).fetchall()
+            years = [row["year"] for row in rows if row["year"] and row["year"].isdigit()]
+            self.send_json({"years": years})
+
+        def date_range_for_period(self, period: str) -> tuple[str, str] | None:
+            today = date.today()
+            if period == "today":
+                start = today
+                end = today + timedelta(days=1)
+            elif period == "last7":
+                start = today - timedelta(days=6)
+                end = today + timedelta(days=1)
+            elif period == "this_month":
+                start = today.replace(day=1)
+                end = self.add_month(start)
+            elif period == "last_month":
+                this_month = today.replace(day=1)
+                start = self.add_month(this_month, -1)
+                end = this_month
+            elif period == "this_year":
+                start = today.replace(month=1, day=1)
+                end = date(today.year + 1, 1, 1)
+            else:
+                return None
+            return start.strftime("%Y/%m/%d"), end.strftime("%Y/%m/%d")
+
+        def add_month(self, value: date, months: int = 1) -> date:
+            month_index = value.year * 12 + value.month - 1 + months
+            year = month_index // 12
+            month = month_index % 12 + 1
+            return date(year, month, 1)
+
         def handle_search(self, params: dict[str, list[str]]) -> None:
             query = params.get("q", [""])[0].strip()
             source = params.get("source", [""])[0]
             box = params.get("box", [""])[0]
+            period = params.get("period", [""])[0]
+            year = params.get("year", [""])[0]
+            month = params.get("month", [""])[0]
             limit = min(int(params.get("limit", ["100"])[0]), 300)
             offset = max(int(params.get("offset", ["0"])[0]), 0)
             grouped = params.get("grouped", [""])[0] == "1"
+            has_attachment = params.get("has_attachment", [""])[0] == "1"
 
             where = []
             sql_params: dict[str, object] = {"limit": limit, "offset": offset}
             if query:
-                where.append(
-                    "(title like :query or person like :query or sender like :query "
-                    "or receiver like :query or body_text like :query)"
-                )
-                sql_params["query"] = f"%{query}%"
+                keywords = [keyword for keyword in query.split() if keyword]
+                if not keywords:
+                    keywords = [query]
+                for index, keyword in enumerate(keywords):
+                    key = f"query{index}"
+                    search_fields = [
+                        f"title like :{key}",
+                        f"person like :{key}",
+                        f"sender like :{key}",
+                        f"body_text like :{key}",
+                        f"coalesce(attachment_names, '') like :{key}",
+                    ]
+                    if box == "send":
+                        search_fields.append(f"receiver like :{key}")
+                    where.append(f"({' or '.join(search_fields)})")
+                    sql_params[key] = f"%{keyword}%"
             if source in {"old", "new"}:
                 where.append("source_db = :source")
                 sql_params["source"] = source
             if box in {"recv", "send"}:
                 where.append("box = :box")
                 sql_params["box"] = box
+            if has_attachment:
+                where.append("coalesce(attachment_names, '') <> ''")
+            date_range = self.date_range_for_period(period)
+            if date_range:
+                where.append("parsed_date >= :date_start and parsed_date < :date_end")
+                sql_params["date_start"], sql_params["date_end"] = date_range
+            elif year and year.isdigit() and len(year) == 4:
+                if month and month.isdigit() and 1 <= int(month) <= 12:
+                    start_date = date(int(year), int(month), 1)
+                    end_date = self.add_month(start_date)
+                    where.append("parsed_date >= :date_start and parsed_date < :date_end")
+                    sql_params["date_start"] = start_date.strftime("%Y/%m/%d")
+                    sql_params["date_end"] = end_date.strftime("%Y/%m/%d")
+                else:
+                    where.append("parsed_date >= :date_start and parsed_date < :date_end")
+                    sql_params["date_start"] = f"{year}/01/01"
+                    sql_params["date_end"] = f"{int(year) + 1}/01/01"
+            elif month and month.isdigit() and 1 <= int(month) <= 12:
+                where.append("substr(parsed_date, 6, 2) = :month")
+                sql_params["month"] = month
 
             where_sql = "where " + " and ".join(where) if where else ""
             with self.get_con() as con:
@@ -681,7 +948,8 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                     select
                         id, source_db, box, original_key, parsed_date, title, person, body_text,
                         case when box = 'recv' then coalesce(is_unread, 0) else 0 end as is_unread,
-                        case when body_text like '%님이 보낸글 >>%' then 1 else 0 end as has_quote
+                        case when body_text like '%님이 보낸글 >>%' then 1 else 0 end as has_quote,
+                        case when coalesce(attachment_names, '') <> '' then 1 else 0 end as has_attachment
                     from messages
                     {where_sql}
                     order by
@@ -698,7 +966,7 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             items = []
             for row in rows:
                 item = row_to_dict(row)
-                item["snippet"] = shorten(row["body_text"], 90)
+                item["snippet"] = shorten(row["body_text"], 180)
                 item["conversation_count"] = len(quote_matches(row["body_text"])) + 1
                 items.append(item)
             self.send_json({"items": items, "total": total, "limit": limit, "offset": offset})
@@ -735,6 +1003,9 @@ def ensure_viewer_schema(db_path: Path) -> None:
         columns = {row[1] for row in con.execute("pragma table_info(messages)")}
         if "is_unread" not in columns:
             con.execute("alter table messages add column is_unread integer not null default 0")
+            con.commit()
+        if "attachment_names" not in columns:
+            con.execute("alter table messages add column attachment_names text")
             con.commit()
     finally:
         con.close()

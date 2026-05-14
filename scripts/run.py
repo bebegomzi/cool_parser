@@ -25,6 +25,7 @@ MESSAGE_COLUMNS = [
     "receiver",
     "body_text",
     "body_raw",
+    "attachment_names",
     "deleted_date",
     "is_unread",
     "recovery_status",
@@ -56,7 +57,7 @@ def parse_args() -> argparse.Namespace:
         "--live-db",
         type=Path,
         default=None,
-        help="바로 읽을 CoolMessenger .udb 경로입니다. 기본값은 LOCALAPPDATA의 정현민.udb입니다.",
+        help="바로 읽을 CoolMessenger .udb 경로입니다. 생략하면 LOCALAPPDATA의 Memo 폴더에서 *.udb를 자동 탐색합니다.",
     )
     parser.add_argument("--input-dir", type=Path, default=Path("input"))
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
@@ -78,11 +79,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def default_live_db() -> Path:
+def default_live_dir() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         raise SystemExit("LOCALAPPDATA 환경 변수를 찾지 못했습니다. --live-db로 경로를 지정하세요.")
-    return Path(local_app_data) / "CoolMessenger" / "Memo." / "정현민.udb"
+    return Path(local_app_data) / "CoolMessenger" / "Memo."
+
+
+def discover_live_db() -> Path:
+    live_dir = default_live_dir()
+    if not live_dir.exists():
+        raise SystemExit(f"CoolMessenger Memo 폴더가 없습니다: {live_dir}")
+
+    candidates = sorted(path for path in live_dir.iterdir() if path.is_file() and path.suffix.lower() == ".udb")
+    if not candidates:
+        raise SystemExit(f"Memo 폴더에서 .udb 파일을 찾지 못했습니다: {live_dir}")
+    if len(candidates) == 1:
+        return candidates[0]
+
+    print("여러 .udb 파일을 찾았습니다. 열 파일을 선택하세요.")
+    for index, path in enumerate(candidates, start=1):
+        print(f"{index}. {path.name}")
+    while True:
+        raw = input("번호 입력: ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= len(candidates):
+            return candidates[int(raw) - 1]
+        print("올바른 번호를 입력하세요.")
 
 
 def backup_sources(input_dir: Path) -> list[Path]:
@@ -126,6 +148,7 @@ def init_csv_db(path: Path) -> sqlite3.Connection:
             receiver text,
             body_text text,
             body_raw text,
+            attachment_names text,
             deleted_date text,
             is_unread integer not null default 0,
             recovery_status text not null,
@@ -150,6 +173,8 @@ def csv_to_sqlite(csv_path: Path, db_path: Path) -> Path:
                 values["source_file"] = csv_path.name
             if not values["body_raw"]:
                 values["body_raw"] = ""
+            if not values["attachment_names"]:
+                values["attachment_names"] = ""
             if not values["body_hash"]:
                 values["body_hash"] = ""
             con.execute(
@@ -212,7 +237,7 @@ def main() -> None:
                 for path in backup_sources(args.input_dir):
                     merge_args.extend(["--db", f"{path.stem}={path}"])
             else:
-                live_db = args.live_db or default_live_db()
+                live_db = args.live_db or discover_live_db()
                 if not live_db.exists():
                     raise SystemExit(f"라이브 DB 파일이 없습니다: {live_db}")
                 temp_live_dir, copied_live_db = copy_live_db_to_temp(live_db)

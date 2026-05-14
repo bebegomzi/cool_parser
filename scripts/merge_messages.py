@@ -19,6 +19,8 @@ RECV_COLUMNS = {
     "body_raw": "MessageBody",
     "deleted_date": "DeletedDate",
     "is_unread": "IsUnRead",
+    "file_path": "FilePath",
+    "link_url": "LinkURL",
 }
 
 SEND_COLUMNS = {
@@ -32,6 +34,8 @@ SEND_COLUMNS = {
     "body_raw": "MessageBody",
     "deleted_date": "DeletedDate",
     "is_unread": "",
+    "file_path": "FilePath",
+    "link_url": "LinkURL",
 }
 
 DATE_RE = re.compile(r"^(\d{4}/\d{2}/\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)")
@@ -112,6 +116,7 @@ def init_output_db(path: Path) -> sqlite3.Connection:
             receiver text,
             body_text text,
             body_raw text,
+            attachment_names text,
             deleted_date text,
             is_unread integer not null default 0,
             recovery_status text not null,
@@ -203,6 +208,22 @@ def resolve_member_list(value: str, member_names: dict[str, str]) -> str:
     return "; ".join(names)
 
 
+def parse_attachment_names(file_path: str, link_url: str) -> str:
+    names = []
+    parts = file_path.split("|") if file_path else []
+    if len(parts) >= 5:
+        for index in range(4, len(parts), 3):
+            name = clean_text(parts[index])
+            if name:
+                names.append(name.rstrip("\\/"))
+
+    link_url = clean_text(link_url)
+    if link_url:
+        names.append(link_url)
+
+    return "; ".join(dict.fromkeys(names))
+
+
 def recover_table(
     source_con: sqlite3.Connection,
     output_con: sqlite3.Connection,
@@ -229,14 +250,18 @@ def recover_table(
             receiver = get_value(row, columns["receiver"])
             if box == "recv":
                 receiver = resolve_member_list(receiver, member_names)
+            attachment_names = parse_attachment_names(
+                get_value(row, columns["file_path"]),
+                get_value(row, columns["link_url"]),
+            )
             output_con.execute(
                 """
                 insert into messages (
                     source_db, source_file, box, original_key, date, parsed_date,
                     title, person, sender, receiver, body_text, body_raw,
-                    deleted_date, is_unread, recovery_status, body_hash
+                    attachment_names, deleted_date, is_unread, recovery_status, body_hash
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_db,
@@ -251,6 +276,7 @@ def recover_table(
                     receiver,
                     body_text,
                     get_value(row, columns["body_raw"]),
+                    attachment_names,
                     get_value(row, columns["deleted_date"]),
                     int(get_value(row, columns["is_unread"]) or 0),
                     "ok",
@@ -317,7 +343,7 @@ def write_reports(con: sqlite3.Connection, output_dir: Path) -> None:
         """
         select
             source_db, box, original_key, parsed_date, date, title, person,
-            sender, receiver, body_text, deleted_date, is_unread, recovery_status
+            sender, receiver, body_text, attachment_names, deleted_date, is_unread, recovery_status
         from messages
         order by parsed_date, source_db, box, original_key
         """,
