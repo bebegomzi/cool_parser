@@ -201,6 +201,8 @@ def resolve_member_list(value: str, member_names: dict[str, str]) -> str:
         return value
 
     ids = [item for item in value.split("|") if item]
+    if len(ids) > 1:
+        ids = ids[1:]
     names = [member_names.get(item, f"알 수 없음({item})") for item in ids]
     return "; ".join(names)
 
@@ -347,15 +349,12 @@ def write_reports(con: sqlite3.Connection, output_dir: Path) -> None:
     )
 
 
-def main() -> None:
-    args = parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    output_db = args.output_dir / "merged_messages.sqlite"
-
+def merge_sources(sources: list[tuple[str, Path]], output_dir: Path) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_db = output_dir / "merged_messages.sqlite"
     output_con = init_output_db(output_db)
     summaries = []
 
-    sources = collect_sources(args)
     for source_db, path in sources:
         if not path.exists():
             raise SystemExit(f"DB 파일이 없습니다: {path}")
@@ -381,7 +380,7 @@ def main() -> None:
         finally:
             source_con.close()
 
-    write_reports(output_con, args.output_dir)
+    write_reports(output_con, output_dir)
     output_con.commit()
 
     total = output_con.execute("select count(*) from messages").fetchone()[0]
@@ -405,6 +404,12 @@ def main() -> None:
     print(f"duplicate_candidate_groups={duplicate_groups}")
     for source_db, box, recovered, failed in summaries:
         print(f"{source_db}:{box}: recovered={recovered}, failed={failed}")
+    return output_db
+
+
+def main() -> None:
+    args = parse_args()
+    merge_sources(collect_sources(args), args.output_dir)
 
 
 if __name__ == "__main__":

@@ -56,6 +56,7 @@
 
 현재 구현된 파일은 다음과 같다.
 
+- `scripts/app.py`: 배포판용 웹 시작 화면과 뷰어 서버를 실행한다.
 - `scripts/merge_messages.py`: `.udb`를 읽어 통합 SQLite DB를 만든다.
 - `scripts/viewer.py`: 통합 SQLite DB를 브라우저에서 검색하고 확인한다.
 - `scripts/run.py`: 기본 실행 진입점이다.
@@ -114,6 +115,8 @@ python scripts\run.py --backup --input-dir sources
 - 보낸 메시지는 오른쪽 노란 말풍선, 받은 메시지는 왼쪽 흰 말풍선
 - 최신 메시지는 우측 상세 화면의 아래쪽에 표시
 - `tbl_member`를 이용해 받은 사람 내부 번호를 가능한 이름으로 변환
+
+배포판은 PyInstaller 폴더 배포 방식으로 빌드한다. 배포 zip에는 `cool_parser.exe`, `input`, `output`, `README.md`를 포함한다. Python이 설치되지 않은 Windows 환경에서도 실행하는 것을 목표로 한다.
 
 CSV 파일은 뷰어용 필수 중간 파일이 아니다. 뷰어는 SQLite를 읽는다. CSV는 사람이 엑셀 등으로 검산하거나 외부 도구에 넘기기 위한 보조 산출물이다.
 

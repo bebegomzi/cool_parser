@@ -9,6 +9,7 @@ import sqlite3
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Callable
 from urllib.parse import parse_qs, urlparse
 
 
@@ -710,7 +711,6 @@ INDEX_HTML = """<!doctype html>
             <strong>읽음 상태</strong><span>${item.is_unread ? "안 읽음" : "읽음"}</span>
             ${renderDetailPeople(item)}
             ${renderAttachments(item.attachment_names)}
-            <strong>원래 키</strong><span>${escapeHtml(item.original_key)}</span>
           </div>
         </div>
         <div class="body">${renderMessageBody(item)}</div>
@@ -810,7 +810,7 @@ def quote_signatures(value: object) -> set[tuple[str, str]]:
     return signatures
 
 
-def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
+def make_handler(db_path: Path | Callable[[], Path]) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -832,7 +832,8 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(data)
 
         def get_con(self) -> sqlite3.Connection:
-            con = sqlite3.connect(db_path)
+            path = db_path() if callable(db_path) else db_path
+            con = sqlite3.connect(path)
             con.row_factory = sqlite3.Row
             return con
 

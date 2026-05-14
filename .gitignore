@@ -1,6 +1,11 @@
 sources/
 input/
 outputs/
+output/
+build/
+dist/
+release/
+*.spec
 *.sqlite
 *.sqlite3
 *.db

@@ -22,6 +22,19 @@ CoolMessenger `.udb` 메시지 DB를 읽어, 메시지를 검색하고 대화 �
 
 Python 3가 필요합니다. 별도 패키지 설치 없이 표준 라이브러리만 사용합니다.
 
+배포판을 받은 경우에는 압축을 푼 뒤 `cool_parser.exe`를 실행하면 됩니다. 실행 후 브라우저 시작 화면에서 현재 CoolMessenger DB 또는 `input` 폴더의 `.udb` 사본을 선택합니다.
+
+배포판 폴더 구조:
+
+```text
+cool_parser/
+  cool_parser.exe
+  input/
+  output/
+```
+
+개발 환경에서 실행할 때는 다음 명령을 사용합니다.
+
 기본 실행:
 
 ```powershell
