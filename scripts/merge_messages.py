@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         metavar="LABEL=PATH",
-        help="읽을 .udb 파일입니다. 예: --db live=C:\\path\\정현민.udb",
+        help="읽을 .udb 파일입니다. 예: --db live=C:\\path\\user.udb",
     )
     parser.add_argument("--old-db", type=Path, default=None)
     parser.add_argument("--new-db", type=Path, default=None)
@@ -76,12 +76,9 @@ def collect_sources(args: argparse.Namespace) -> list[tuple[str, Path]]:
     if args.new_db is not None:
         sources.append(("new", args.new_db))
     if not sources:
-        default_old = Path("sources/정현민(오류).udb")
-        default_new = Path("sources/정현민(정상).udb")
-        if default_old.exists():
-            sources.append(("old", default_old))
-        if default_new.exists():
-            sources.append(("new", default_new))
+        source_dir = Path("sources")
+        if source_dir.exists():
+            sources.extend((path.stem, path) for path in sorted(source_dir.glob("*.udb")))
     if not sources:
         raise SystemExit("읽을 .udb 파일이 없습니다. --db LABEL=PATH를 지정하세요.")
     return sources

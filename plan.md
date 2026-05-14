@@ -69,7 +69,7 @@ python scripts\run.py
 
 기본 실행 흐름은 다음과 같다.
 
-1. `%LOCALAPPDATA%\CoolMessenger\Memo.\정현민.udb`를 임시 폴더로 복사한다.
+1. `%LOCALAPPDATA%\CoolMessenger\Memo.` 폴더에서 `*.udb` 파일을 찾아 임시 폴더로 복사한다.
 2. 임시 복사본을 읽기 전용으로 파싱한다.
 3. `outputs/run_타임스탬프/merged_messages.sqlite`를 만든다.
 4. 로컬 웹 뷰어를 실행한다.

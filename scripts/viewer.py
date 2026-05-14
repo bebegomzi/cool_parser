@@ -595,7 +595,7 @@ INDEX_HTML = """<!doctype html>
     function isMine(sender, item) {
       const name = String(sender ?? "").trim();
       if (!name) return item.box === "send";
-      return name.includes("정현민");
+      return item.owner_name && name.includes(item.owner_name);
     }
 
     function renderMessageBody(item) {
@@ -779,9 +779,16 @@ def date_minute(value: object) -> str:
     return text[:16] if len(text) >= 16 else text
 
 
+def owner_name_from_source_file(value: object) -> str:
+    name = Path(str(value or "")).stem
+    if "(" in name:
+        name = name.split("(", 1)[0]
+    return name.strip()
+
+
 def signature_from_row(row: sqlite3.Row) -> tuple[str, str]:
     if row["box"] == "send":
-        return ("정현민", date_minute(row["parsed_date"]))
+        return (owner_name_from_source_file(row["source_file"]), date_minute(row["parsed_date"]))
     return (clean_person(row["person"]), date_minute(row["parsed_date"]))
 
 
@@ -946,7 +953,7 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
                 rows = con.execute(
                     f"""
                     select
-                        id, source_db, box, original_key, parsed_date, title, person, body_text,
+                        id, source_db, source_file, box, original_key, parsed_date, title, person, body_text,
                         case when box = 'recv' then coalesce(is_unread, 0) else 0 end as is_unread,
                         case when body_text like '%님이 보낸글 >>%' then 1 else 0 end as has_quote,
                         case when coalesce(attachment_names, '') <> '' then 1 else 0 end as has_attachment
@@ -966,6 +973,7 @@ def make_handler(db_path: Path) -> type[BaseHTTPRequestHandler]:
             items = []
             for row in rows:
                 item = row_to_dict(row)
+                item["owner_name"] = owner_name_from_source_file(row["source_file"])
                 item["snippet"] = shorten(row["body_text"], 180)
                 item["conversation_count"] = len(quote_matches(row["body_text"])) + 1
                 items.append(item)
