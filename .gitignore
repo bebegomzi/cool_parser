@@ -1,0 +1,8 @@
+sources/
+input/
+outputs/
+*.sqlite
+*.sqlite3
+*.db
+*.udb
+__pycache__/
