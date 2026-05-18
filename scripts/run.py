@@ -41,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument(
         "--use-existing",
         action="store_true",
-        help="파싱하지 않고 기존 outputs/merged_messages.sqlite를 바로 엽니다.",
+        help="파싱하지 않고 기존 output/merged_messages.sqlite를 바로 엽니다.",
     )
     mode.add_argument(
         "--from-csv",
@@ -60,12 +60,12 @@ def parse_args() -> argparse.Namespace:
         help="바로 읽을 CoolMessenger .udb 경로입니다. 생략하면 LOCALAPPDATA의 Memo 폴더에서 *.udb를 자동 탐색합니다.",
     )
     parser.add_argument("--input-dir", type=Path, default=Path("input"))
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument(
         "--work-dir",
         type=Path,
         default=None,
-        help="새로 파싱할 결과를 저장할 작업 폴더입니다. 기본값은 outputs/run_타임스탬프입니다.",
+        help="새로 파싱할 결과를 저장할 작업 폴더입니다. 기본값은 output/run_타임스탬프입니다.",
     )
     parser.add_argument(
         "--keep-work-dir",

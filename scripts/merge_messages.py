@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--old-db", type=Path, default=None)
     parser.add_argument("--new-db", type=Path, default=None)
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
     return parser.parse_args()
 
 

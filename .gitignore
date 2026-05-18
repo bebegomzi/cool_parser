@@ -2,6 +2,7 @@ sources/
 input/
 outputs/
 output/
+lab/
 build/
 dist/
 release/

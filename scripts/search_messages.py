@@ -11,7 +11,7 @@ def parse_args() -> argparse.Namespace:
         description="merged_messages.sqlite에서 메시지를 검색하거나 자세히 봅니다."
     )
     parser.add_argument("query", nargs="?", help="제목, 사람, 본문에서 찾을 검색어")
-    parser.add_argument("--db", type=Path, default=Path("outputs/merged_messages.sqlite"))
+    parser.add_argument("--db", type=Path, default=Path("output/merged_messages.sqlite"))
     parser.add_argument("--limit", type=int, default=20, help="검색 결과 최대 개수")
     parser.add_argument("--source", choices=["old", "new"], help="예전/새 DB 중 하나만 보기")
     parser.add_argument("--box", choices=["recv", "send"], help="받은/보낸 메시지 중 하나만 보기")

@@ -136,6 +136,42 @@ INDEX_HTML = """<!doctype html>
       font-size: 13px;
       white-space: nowrap;
     }
+    .editbar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+    }
+    .editbar.show { display: flex; }
+    .editbar button {
+      width: auto;
+      padding: 0 10px;
+    }
+    .editbar select {
+      min-width: 160px;
+      max-width: 240px;
+    }
+    .editbar .secondary {
+      background: #fff;
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .editbar .danger {
+      background: #c93838;
+      border-color: #c93838;
+    }
+    .editbar .danger:disabled {
+      background: #e4e7ec;
+      border-color: #e4e7ec;
+      color: #98a2b3;
+      cursor: default;
+    }
+    .edit-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
     input, select, button {
       height: 36px;
       border: 1px solid var(--line);
@@ -158,7 +194,9 @@ INDEX_HTML = """<!doctype html>
     }
     .item {
       width: 100%;
-      display: block;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
       min-height: 74px;
       padding: 11px 12px;
       border: 1px solid transparent;
@@ -168,6 +206,16 @@ INDEX_HTML = """<!doctype html>
       text-align: left;
       cursor: pointer;
       overflow: hidden;
+    }
+    .item.selecting {
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+    .select-check {
+      width: 16px;
+      height: 16px;
+      margin-top: 4px;
     }
     .item.recv {
       background: #fff;
@@ -183,6 +231,10 @@ INDEX_HTML = """<!doctype html>
       border-left-width: 5px;
       padding-left: 8px;
       box-shadow: inset 0 0 0 1px #1f6fbf;
+    }
+    .item.multi-selected {
+      border-color: #1f6fbf;
+      box-shadow: inset 0 0 0 2px #1f6fbf;
     }
     .meta {
       display: flex;
@@ -401,6 +453,52 @@ INDEX_HTML = """<!doctype html>
       opacity: 1;
       transform: translateY(0);
     }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.34);
+      z-index: 20;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      width: min(420px, 100%);
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    }
+    .modal h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    .modal p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .modal label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .modal-actions .secondary {
+      background: #fff;
+      color: var(--text);
+      border-color: var(--line);
+    }
     .attach-badge {
       background: #eefaf2;
       border-color: #8fc5a6;
@@ -482,6 +580,15 @@ INDEX_HTML = """<!doctype html>
         <div class="page-info" id="pageInfo">1쪽</div>
         <button type="button" id="nextPage">다음</button>
       </div>
+      <div class="editbar" id="editBar">
+        <button type="button" class="secondary" id="toggleSelect">선택 모드</button>
+        <button type="button" class="danger" id="deleteSelected" disabled>선택 삭제</button>
+        <select id="importSource" aria-label="가져올 DB">
+          <option value="">가져올 DB</option>
+        </select>
+        <button type="button" class="secondary" id="importAll" disabled>전체 가져오기</button>
+        <span class="edit-note" id="editNote">input DB를 열었을 때만 삭제할 수 있습니다.</span>
+      </div>
       <div id="results" class="results"></div>
     </section>
     <section class="right" id="detail">
@@ -489,6 +596,17 @@ INDEX_HTML = """<!doctype html>
     </section>
   </main>
   <div class="toast" id="toast"></div>
+  <div class="modal-backdrop" id="deleteModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+      <h2 id="deleteModalTitle">메시지 삭제</h2>
+      <p id="deleteModalText"></p>
+      <label><input type="checkbox" id="skipDeleteConfirm"> 다시 묻지 않음</label>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="cancelDelete">아니오</button>
+        <button type="button" class="danger" id="confirmDelete">예, 삭제</button>
+      </div>
+    </div>
+  </div>
   <script>
     const form = document.querySelector("#searchForm");
     const results = document.querySelector("#results");
@@ -499,9 +617,27 @@ INDEX_HTML = """<!doctype html>
     const pageInfo = document.querySelector("#pageInfo");
     const yearFilter = document.querySelector("#yearFilter");
     const toast = document.querySelector("#toast");
+    const editBar = document.querySelector("#editBar");
+    const toggleSelect = document.querySelector("#toggleSelect");
+    const deleteSelected = document.querySelector("#deleteSelected");
+    const editNote = document.querySelector("#editNote");
+    const deleteModal = document.querySelector("#deleteModal");
+    const deleteModalText = document.querySelector("#deleteModalText");
+    const skipDeleteConfirm = document.querySelector("#skipDeleteConfirm");
+    const cancelDelete = document.querySelector("#cancelDelete");
+    const confirmDelete = document.querySelector("#confirmDelete");
+    const importSource = document.querySelector("#importSource");
+    const importAll = document.querySelector("#importAll");
     const pageSize = 100;
     let currentPage = 1;
     let currentKeywords = [];
+    let canEdit = false;
+    let requiresBackupNotice = false;
+    let selecting = false;
+    let activeId = "";
+    let anchorId = "";
+    let deleteConfirmedOnce = false;
+    const checkedIds = new Set();
 
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, ch => ({
@@ -575,6 +711,105 @@ INDEX_HTML = """<!doctype html>
       } catch {
         showToast("복사에 실패했습니다.", anchor);
       }
+    }
+
+    function updateDeleteButton() {
+      const count = checkedIds.size || (activeId ? 1 : 0);
+      deleteSelected.disabled = count === 0;
+      deleteSelected.textContent = checkedIds.size ? `선택 삭제 (${checkedIds.size})` : "현재 삭제";
+    }
+
+    function visibleItemIds() {
+      return [...results.querySelectorAll(".item")].map(item => String(item.dataset.id));
+    }
+
+    function syncSelectionStyles() {
+      document.querySelectorAll(".item").forEach(item => {
+        const selected = checkedIds.has(String(item.dataset.id));
+        item.classList.toggle("multi-selected", selected);
+        const checkbox = item.querySelector(".select-check");
+        if (checkbox) checkbox.checked = selected;
+      });
+      updateDeleteButton();
+    }
+
+    function toggleChecked(id) {
+      if (checkedIds.has(id)) checkedIds.delete(id);
+      else checkedIds.add(id);
+      anchorId = id;
+      syncSelectionStyles();
+    }
+
+    function selectRange(toId) {
+      const ids = visibleItemIds();
+      const from = ids.indexOf(anchorId || activeId || toId);
+      const to = ids.indexOf(toId);
+      if (from === -1 || to === -1) {
+        checkedIds.add(toId);
+        anchorId = toId;
+        syncSelectionStyles();
+        return;
+      }
+      const [start, end] = from <= to ? [from, to] : [to, from];
+      for (const id of ids.slice(start, end + 1)) checkedIds.add(id);
+      anchorId = toId;
+      syncSelectionStyles();
+    }
+
+    async function loadCapabilities() {
+      const response = await fetch("/api/capabilities");
+      const data = await response.json();
+      canEdit = Boolean(data.editable);
+      requiresBackupNotice = Boolean(data.requires_backup_notice);
+      editBar.classList.toggle("show", canEdit);
+      if (data.target) {
+        editNote.textContent = requiresBackupNotice
+          ? `편집 대상: ${data.target} / 첫 수정 때 백업을 만듭니다.`
+          : `편집 대상: ${data.target}`;
+      } else {
+        editNote.textContent = "편집 가능한 DB를 열었을 때만 삭제할 수 있습니다.";
+      }
+    }
+
+    async function loadImportSources() {
+      if (!canEdit) return;
+      const response = await fetch("/api/import-sources");
+      const data = await response.json();
+      if (!response.ok) return;
+      importSource.innerHTML = `<option value="">가져올 DB</option>` + data.items.map(item => (
+        `<option value="${escapeHtml(item.index)}">${escapeHtml(item.name)} (${escapeHtml(item.size)})</option>`
+      )).join("");
+      importAll.disabled = importSource.value === "";
+    }
+
+    function askDeleteConfirm(ids) {
+      return new Promise(resolve => {
+        const backupText = requiresBackupNotice ? " 현재 DB를 직접 수정하므로, 첫 수정 전에 백업을 만듭니다." : "";
+        deleteModalText.textContent = `선택한 ${ids.length}개 메시지를 삭제할까요? 대화로 묶인 메시지는 가능한 범위에서 함께 삭제합니다.${backupText}`;
+        deleteModal.classList.add("show");
+        confirmDelete.focus();
+
+        const close = result => {
+          deleteModal.classList.remove("show");
+          cancelDelete.removeEventListener("click", onCancel);
+          confirmDelete.removeEventListener("click", onConfirm);
+          deleteModal.removeEventListener("click", onBackdrop);
+          document.removeEventListener("keydown", onKey);
+          resolve(result);
+        };
+        const onCancel = () => close(false);
+        const onConfirm = () => close(true);
+        const onBackdrop = event => {
+          if (event.target === deleteModal) close(false);
+        };
+        const onKey = event => {
+          if (event.key === "Escape") close(false);
+        };
+        cancelDelete.addEventListener("click", onCancel);
+        confirmDelete.addEventListener("click", onConfirm);
+        deleteModal.addEventListener("click", onBackdrop);
+        document.addEventListener("keydown", onKey);
+      });
     }
 
     function renderAttachments(value) {
@@ -677,23 +912,29 @@ INDEX_HTML = """<!doctype html>
       prevPage.disabled = currentPage <= 1;
       nextPage.disabled = currentPage * pageSize >= data.total;
       results.innerHTML = data.items.map(item => `
-        <button class="item ${item.box} ${item.is_unread ? "unread" : ""}" data-id="${item.id}">
-          <div class="meta">
-            <span class="badge">${escapeHtml(item.parsed_date)}</span>
-            <span class="badge">${labelSource(item.source_db)}</span>
-            <span class="badge ${item.box === "send" ? "send-badge" : "recv-badge"}">${labelBox(item.box)}</span>
-            ${item.is_unread ? `<span class="badge unread-badge">안 읽음</span>` : ""}
-            ${item.has_quote ? `<span class="badge reply-badge">인용</span>` : ""}
-            ${item.conversation_count > 1 ? `<span class="badge reply-badge">대화 ${item.conversation_count}</span>` : ""}
-            ${item.has_attachment ? `<span class="badge attach-badge">첨부</span>` : ""}
-            <span>${highlight(item.person)}</span>
+        <button class="item ${item.box} ${item.is_unread ? "unread" : ""} ${selecting ? "selecting" : ""} ${checkedIds.has(String(item.id)) ? "multi-selected" : ""}" data-id="${item.id}">
+          ${selecting ? `<input class="select-check" type="checkbox" ${checkedIds.has(String(item.id)) ? "checked" : ""}>` : ""}
+          <div>
+            <div class="meta">
+              <span class="badge">${escapeHtml(item.parsed_date)}</span>
+              <span class="badge">${labelSource(item.source_db)}</span>
+              <span class="badge ${item.box === "send" ? "send-badge" : "recv-badge"}">${labelBox(item.box)}</span>
+              ${item.is_unread ? `<span class="badge unread-badge">안 읽음</span>` : ""}
+              ${item.has_quote ? `<span class="badge reply-badge">인용</span>` : ""}
+              ${item.conversation_count > 1 ? `<span class="badge reply-badge">대화 ${item.conversation_count}</span>` : ""}
+              ${item.has_attachment ? `<span class="badge attach-badge">첨부</span>` : ""}
+              <span>${highlight(item.person)}</span>
+            </div>
+            <div class="snippet">${highlight(item.snippet || item.title || "(내용 없음)")}</div>
           </div>
-          <div class="snippet">${highlight(item.snippet || item.title || "(내용 없음)")}</div>
         </button>
       `).join("") || `<div class="empty">검색 결과가 없습니다.</div>`;
+      syncSelectionStyles();
     }
 
     async function loadDetail(id) {
+      activeId = String(id);
+      anchorId = activeId;
       document.querySelectorAll(".item").forEach(el => el.classList.toggle("active", el.dataset.id === id));
       const response = await fetch(`/api/message?id=${encodeURIComponent(id)}`);
       const item = await response.json();
@@ -717,6 +958,7 @@ INDEX_HTML = """<!doctype html>
       `;
       const body = detail.querySelector(".body");
       if (body) body.scrollTop = body.scrollHeight;
+      updateDeleteButton();
     }
 
     async function loadYears() {
@@ -730,7 +972,102 @@ INDEX_HTML = """<!doctype html>
 
     results.addEventListener("click", event => {
       const item = event.target.closest(".item");
-      if (item) loadDetail(item.dataset.id);
+      if (!item) return;
+      const id = String(item.dataset.id);
+      if (event.shiftKey) {
+        selectRange(id);
+        if (!selecting) loadDetail(id);
+        return;
+      }
+      if (event.ctrlKey || event.metaKey || selecting) {
+        toggleChecked(id);
+        return;
+      }
+      if (checkedIds.size) {
+        checkedIds.clear();
+        syncSelectionStyles();
+      }
+      loadDetail(id);
+    });
+    toggleSelect.addEventListener("click", () => {
+      selecting = !selecting;
+      checkedIds.clear();
+      anchorId = activeId;
+      toggleSelect.textContent = selecting ? "선택 취소" : "선택 모드";
+      searchMessages(undefined, currentPage);
+    });
+    async function deleteCurrentSelection() {
+      if (!canEdit) return;
+      const ids = checkedIds.size ? [...checkedIds] : (activeId ? [activeId] : []);
+      if (ids.length === 0) return;
+      const shouldConfirm = !skipDeleteConfirm.checked || !deleteConfirmedOnce;
+      if (shouldConfirm) {
+        const ok = await askDeleteConfirm(ids);
+        if (!ok) return;
+        deleteConfirmedOnce = true;
+      }
+      const response = await fetch("/api/delete", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ids, conversation: true})
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        showToast(data.error || "삭제에 실패했습니다.", deleteSelected);
+        return;
+      }
+      if (data.backup) {
+        requiresBackupNotice = false;
+        editNote.textContent = `편집 대상 백업 생성됨: ${data.backup}`;
+      }
+      showToast(`${data.deleted}건 삭제 완료`, deleteSelected);
+      checkedIds.clear();
+      activeId = "";
+      anchorId = "";
+      selecting = false;
+      toggleSelect.textContent = "선택 모드";
+      detail.innerHTML = `<div class="empty">왼쪽에서 메시지를 선택하면 본문이 표시됩니다.</div>`;
+      await loadYears();
+      await searchMessages(undefined, 1);
+    }
+    deleteSelected.addEventListener("click", deleteCurrentSelection);
+    importSource.addEventListener("change", () => {
+      importAll.disabled = importSource.value === "";
+    });
+    importAll.addEventListener("click", async () => {
+      if (!canEdit || importSource.value === "") return;
+      const selectedName = importSource.options[importSource.selectedIndex]?.textContent || "선택한 DB";
+      const backupText = requiresBackupNotice ? "\\n\\n현재 DB를 직접 수정하므로, 첫 수정 전에 백업을 만듭니다." : "";
+      const ok = confirm(`${selectedName}의 받은 메시지와 보낸 메시지를 모두 현재 DB로 가져올까요?${backupText}`);
+      if (!ok) return;
+      importAll.disabled = true;
+      showToast("가져오는 중입니다.", importAll);
+      const response = await fetch("/api/import-all", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({source_index: Number(importSource.value)})
+      });
+      const data = await response.json();
+      importAll.disabled = importSource.value === "";
+      if (!response.ok) {
+        showToast(data.error || "가져오기에 실패했습니다.", importAll);
+        return;
+      }
+      if (data.backup) requiresBackupNotice = false;
+      showToast(`${data.total}건 가져오기 완료`, importAll);
+      detail.innerHTML = `<div class="empty">왼쪽에서 메시지를 선택하면 본문이 표시됩니다.</div>`;
+      activeId = "";
+      anchorId = "";
+      await loadYears();
+      await searchMessages(undefined, 1);
+    });
+    document.addEventListener("keydown", event => {
+      const tagName = String(event.target?.tagName ?? "").toLowerCase();
+      if (tagName === "input" || tagName === "textarea" || tagName === "select") return;
+      if (event.key !== "Delete" && event.key !== "Del") return;
+      if (!canEdit) return;
+      event.preventDefault();
+      deleteCurrentSelection();
     });
     detail.addEventListener("click", event => {
       const attachment = event.target.closest(".attachment");
@@ -742,6 +1079,7 @@ INDEX_HTML = """<!doctype html>
     });
     nextPage.addEventListener("click", () => searchMessages(undefined, currentPage + 1));
     document.querySelector("#query").focus();
+    loadCapabilities().then(loadImportSources);
     loadYears();
     searchMessages(undefined, 1);
   </script>
@@ -752,7 +1090,7 @@ INDEX_HTML = """<!doctype html>
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="통합 메시지 DB를 브라우저에서 보는 로컬 GUI")
-    parser.add_argument("--db", type=Path, default=Path("outputs/merged_messages.sqlite"))
+    parser.add_argument("--db", type=Path, default=Path("output/merged_messages.sqlite"))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--open", action="store_true", help="시작 후 기본 브라우저를 엽니다.")
@@ -810,7 +1148,11 @@ def quote_signatures(value: object) -> set[tuple[str, str]]:
     return signatures
 
 
-def make_handler(db_path: Path | Callable[[], Path]) -> type[BaseHTTPRequestHandler]:
+def make_handler(
+    db_path: Path | Callable[[], Path],
+    capabilities: Callable[[], dict[str, object]] | None = None,
+    delete_messages: Callable[[list[int], bool], dict[str, object]] | None = None,
+) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -819,6 +1161,7 @@ def make_handler(db_path: Path | Callable[[], Path]) -> type[BaseHTTPRequestHand
             data = body.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -827,6 +1170,7 @@ def make_handler(db_path: Path | Callable[[], Path]) -> type[BaseHTTPRequestHand
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -845,10 +1189,30 @@ def make_handler(db_path: Path | Callable[[], Path]) -> type[BaseHTTPRequestHand
                 self.handle_search(parse_qs(parsed.query))
             elif parsed.path == "/api/years":
                 self.handle_years()
+            elif parsed.path == "/api/capabilities":
+                self.send_json(capabilities() if capabilities else {"editable": False})
             elif parsed.path == "/api/message":
                 self.handle_message(parse_qs(parsed.query))
             else:
                 self.send_json({"error": "찾을 수 없는 주소입니다."}, 404)
+
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path != "/api/delete":
+                self.send_json({"error": "찾을 수 없는 주소입니다."}, 404)
+                return
+            if delete_messages is None:
+                self.send_json({"error": "이 화면에서는 삭제할 수 없습니다."}, 400)
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            try:
+                ids = [int(value) for value in payload.get("ids", [])]
+                result = delete_messages(ids, bool(payload.get("conversation", True)))
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 400)
+                return
+            self.send_json(result)
 
         def handle_years(self) -> None:
             with self.get_con() as con:
